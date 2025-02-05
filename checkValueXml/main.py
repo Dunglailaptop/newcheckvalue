@@ -15,11 +15,45 @@ import io
 import os
 import requests
 import base64
+import qrcode
 from io import BytesIO
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
+def read_3():
+    image_path = 'temp.png'
+    image = cv2.imread(image_path)
+    if image is None:
+        print("Không thể đọc được ảnh.")
+        exit()
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Tạo mask nhị phân bằng OTSU
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+    # Trường hợp chữ màu đậm, nền trắng => có thể cần đảo ngược
+    # thresh = cv2.bitwise_not(thresh)
+
+    # Tạo kernel để loại bỏ đường kẻ (thử kernel nhỏ để "mở" các nét mảnh)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 5))
+    clean = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+
+    # Hoặc nếu đường kẻ có nhiều hướng, bạn phải thử kernel dạng (3x3) hoặc (2x2) để không làm mất chữ
+    # kernel = np.ones((2,2), np.uint8)
+    # clean = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+
+    # Phóng to ảnh
+    height, width = clean.shape
+    clean = cv2.resize(clean, (width*2, height*2), interpolation=cv2.INTER_CUBIC)
+
+    # Áp dụng Tesseract
+    custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    text = pytesseract.image_to_string(clean, config=custom_config)
+
+    print("Kết quả OCR (loại bỏ đường kẻ mảnh):")
+    print(text)
 
 
 
@@ -85,13 +119,13 @@ def preprocess_image(image):
 
 def login():
     url = "https://gdbhyt.baohiemxahoi.gov.vn/DashboardXml1"
+    urlchecklist = "https://gdbhyt.baohiemxahoi.gov.vn/DanhSachHSKCB/Index"
     ma_bv = "79408"
     username = "079201003497"
-    password = "079201003497Dung@"
+    password = "079201003497@Dung"
 
-    # Khởi tạo WebDriver
     options = webdriver.ChromeOptions()
-    options.add_argument("--start-maximized")  # Mở toàn màn hình
+    options.add_argument("--start-maximized")
     driver = webdriver.Chrome(options=options)
 
     try:
@@ -115,41 +149,64 @@ def login():
         captcha_path = "captcha.png"
         captcha_img.screenshot(captcha_path)
 
-        # Giải mã CAPTCHA
-       # Hiển thị CAPTCHA để nhập thủ công
-        captcha_code = input(f"Nhập mã CAPTCHA hiển thị trong {captcha_path}: ")
+        # Tạo mã QR từ hình ảnh CAPTCHA
+        qr = qrcode.QRCode()
+        qr.add_data(captcha_path)
+        qr.make(fit=True)
 
-        # Nhập mã CAPTCHA vào ô
-        captcha_input = driver.find_element(By.ID, "Captcha_TB_I")
-        captcha_input.send_keys(captcha_code)
+        # Hiển thị mã QR trong terminal
+        qr.print_ascii()
 
-        # Nhấn nút đăng nhập
-        login_button = driver.find_element(By.CLASS_NAME, "btn_dangNhap")
-        login_button.click()
+      
+        check = True
+        while check:
+            # Nhập mã CAPTCHA thủ công
+            captcha_code = input("Nhập mã CAPTCHA từ ảnh: ")
 
-        print("Đang đăng nhập...")
+            # Nhập mã CAPTCHA vào ô
+            captcha_input = driver.find_element(By.ID, "Captcha_TB_I")
+            captcha_input.send_keys(captcha_code)
+            time.sleep(1)   
+            # Nhấn nút đăng nhập
+            login_button = driver.find_element(By.CLASS_NAME, "btn_dangNhap")
+            login_button.click()
+            print("Đang đăng nhập...")
+            time.sleep(5)
 
-        # Chờ một chút để kiểm tra xem có lỗi gì không
-        time.sleep(5)
-
-        # Kiểm tra xem có thông báo lỗi không
-        try:
-            error_message = driver.find_element(By.ID, "lblMessage").text
-            if error_message:
-                print(f"Lỗi đăng nhập: {error_message}")
-            else:
+            # Kiểm tra xem có lỗi gì không
+            try:
+                error_message = driver.find_element(By.ID, "alert").text
+                if error_message:
+                    check = True
+                    print(f"Lỗi đăng nhập: {error_message}")
+                else:
+                    check = False
+                    print("Đăng nhập thành công!")
+            except:
+                check = False
                 print("Đăng nhập thành công!")
-        except:
-            print("Đăng nhập thành công!")
+        driver.get(urlchecklist)
+        time.sleep(1)
+        
+        buttonchose = driver.find_element(By.ID, "cb_TrangThaiTT_B-1")
+        buttonchose.click()
+        
+        time.sleep(1)
 
+        cho_danh_sach = driver.find_element(By.ID, "cb_TrangThaiTT_DDD_L_LBI0T0")
+        cho_danh_sach.click()
+
+        time.sleep(1)
+
+        timkiem = driver.find_element(By.ID,"bt_TimKiem")
+        timkiem.click()
+        
     except Exception as e:
         print(f"Lỗi: {e}")
     finally:
-        # Giữ trình duyệt mở để kiểm tra (hoặc đóng trình duyệt sau một khoảng thời gian)
         input("Nhấn Enter để đóng trình duyệt...")
         driver.quit()
 
 # Gọi hàm login
 
-
-
+login()
