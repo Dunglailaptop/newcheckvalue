@@ -6,7 +6,10 @@ from selenium.webdriver.chrome.service import Service
 import time
 import qrcode
 import json
+import threading
+import sourceString as sour
 import base64
+import customtkinter
 import customtkinter as ctk
 from tkinter import messagebox
 from tkinter import ttk
@@ -163,11 +166,11 @@ def setupapp():
         messagebox.showinfo("Thông báo", "Bạn đã nhấn nút thứ hai!")
 
     # Tạo nút bấm
-    button1 = ctk.CTkButton(app, text="Chọn file",  command=lambda:getlistfilexml(tree))
-    button1.pack(pady=5)
+    button1 = ctk.CTkButton(app, text="Chọn file", command=lambda: open_export(app))
+    button1.pack(side="left", padx=5, pady=5)
 
-    button2 = ctk.CTkButton(app, text="Đọc kết quả", command=lambda:login())
-    button2.pack(pady=5)
+    button2 = ctk.CTkButton(app, text="Đọc kết quả", command=lambda: login())
+    button2.pack(side="left", padx=5, pady=5)
 
     
     # Chạy ứng dụng
@@ -411,6 +414,11 @@ def load_image(file_path,captcha_window):
     captcha_window.wait_variable(captcha_var)
     return captcha_var.get() 
 
+
+def open_export(app):
+    import mainExportXML as mainex
+    mainex.settupAppBeginStart(app)
+
 def login():
     url = "https://gdbhyt.baohiemxahoi.gov.vn/DashboardXml1"
     urlchecklist = "https://gdbhyt.baohiemxahoi.gov.vn/DanhSachHSKCB/Index"
@@ -438,9 +446,6 @@ def login():
         password_input = driver.find_element(By.ID, "password")
         password_input.send_keys(password)
 
-        #drop thang
-      
-
         # Chụp ảnh CAPTCHA
         captcha_img = driver.find_element(By.ID, "Captcha_IMG1")
         captcha_path = "captcha.png"
@@ -450,7 +455,7 @@ def login():
         check = True
         while check:
             root = tk.Tk()
-            root.withdraw()
+            root.withdraw()  # Hide tkinter root window
             code = load_image(captcha_path, root)
             root.destroy()
 
@@ -458,7 +463,7 @@ def login():
             captcha_input = driver.find_element(By.ID, "Captcha_TB_I")
             captcha_input.clear()
             captcha_input.send_keys(code)
-            time.sleep(1)   
+            time.sleep(1)
 
             # Nhấn nút đăng nhập
             login_button = driver.find_element(By.CLASS_NAME, "btn_dangNhap")
@@ -482,65 +487,47 @@ def login():
         time.sleep(3)
         driver.get(urlchecklist)
         time.sleep(1)
-
-
-        #
-       
-
-        # Chọn dropdown "Tháng"
-        # buttonchose1 = WebDriverWait(driver, 10).until(
-        #     EC.presence_of_element_located((By.ID, "cbx_thang_I"))
-        # )
-        # driver.execute_script("arguments[0].scrollIntoView();", buttonchose1)
-        # time.sleep(1)
-
-        # # Di chuột đến và click bằng ActionChains
-        # actions = ActionChains(driver)
-        # actions.move_to_element(buttonchose1).click().perform()
-        # time.sleep(1)
-
-        # Mở dropdown trạng thái
-        # buttonchose = WebDriverWait(driver, 10).until(
-        #     EC.element_to_be_clickable((By.ID, "cb_TrangThaiTT_B-1"))
-        # )
-        # driver.execute_script("arguments[0].scrollIntoView();", buttonchose)
-        # buttonchose.click()
-        # time.sleep(1)
-        buttonchose = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "cb_TrangThaiTT_B-1"))
-        )
-
-        # Cuộn đến phần tử
-        driver.execute_script("arguments[0].scrollIntoView();", buttonchose)
-        time.sleep(1)
-
-        # Sử dụng ActionChains để nhấn chính xác
-        actions = ActionChains(driver)
-        actions.move_to_element(buttonchose).click().perform()
-        time.sleep(1)
-        # Chọn "Chờ danh sách"
-        cho_danh_sach = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "cb_TrangThaiTT_DDD_L_LBI0T0"))
-        )
-        cho_danh_sach.click()
-        time.sleep(1)
-
-        # Nhấn nút tìm kiếm
-        timkiem = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "bt_TimKiem"))
-        )
-        driver.execute_script("arguments[0].scrollIntoView();", timkiem)
-        time.sleep(1)
-        timkiem.click()
-
-        # Gọi hàm xử lý tiếp
-        CHECKVLAUE(driver, timkiem)
         
+        hamxuly1(driver)
+
+
     except Exception as e:
         print(f"Lỗi: {e}")
     finally:
         input("Nhấn Enter để đóng trình duyệt...")
         driver.quit()
+
+
+def hamxuly1(driver):
+        # Mở dropdown trạng thái
+    buttonchose = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.ID, "cb_TrangThaiTT_B-1"))
+    )
+
+    # Cuộn đến phần tử để đảm bảo phần tử không bị che khuất
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", buttonchose)
+
+    # Dùng ActionChains để nhấn vào phần tử
+    actions = ActionChains(driver)
+    actions.move_to_element(buttonchose).click().perform()
+    time.sleep(1)
+
+    # Chọn "Chờ danh sách"
+    cho_danh_sach = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "cb_TrangThaiTT_DDD_L_LBI0T0"))
+    )
+    cho_danh_sach.click()
+    time.sleep(1)
+
+    # Nhấn nút tìm kiếm
+    timkiem = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.ID, "bt_TimKiem"))
+    )
+    driver.execute_script("arguments[0].scrollIntoView();", timkiem)
+    time.sleep(1)
+    timkiem.click()
+
+    # Gọi hàm xử lý tiếp
+    CHECKVLAUE(driver, timkiem)
 
 # Gọi hàm login
 
