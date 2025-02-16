@@ -314,26 +314,24 @@ def excel_to_json(file_path, output_json):
         print(f"Lỗi: {e}")
 
 def converttojsonexportkqxml(app):
+    """Hàm chính chạy tối ưu hơn."""
     global folderurl
     file_path = os.path.join(folderurl, "dataJson.json")
 
-    # Kiểm tra đường dẫn hợp lệ
     if not folderurl or not file_path:
-        messagebox.showinfo(title="LỖI!", message="VUI LÒNG CHỌN FILE JSON ĐÃ XUẤT")
+        print("❌ LỖI: Vui lòng chọn file JSON đã xuất!")
         return
-    
+
     print(f"✅ Bắt đầu xử lý với folder: {folderurl}")
 
     try:
-        # Load dữ liệu JSON
         data = loadfind_json()
         if not data:
-            print("❌ Lỗi: Không có dữ liệu trong dataJson.json")
+            print("❌ Không có dữ liệu trong dataJson.json")
             return
         
         print(f"🔍 Số lượng bản ghi: {len(data)}")
 
-        # Chọn file Excel
         path = chon_file_excel(app)
         if not path:
             print("❌ Lỗi: Không chọn được file Excel")
@@ -341,18 +339,34 @@ def converttojsonexportkqxml(app):
         
         print(f"📂 File Excel được chọn: {path}")
 
-        # Chuyển đổi Excel -> JSON
         excel_to_json(path, "dataXmlResult.json")
 
+        # Đọc dữ liệu một lần duy nhất
+        with open("dataXmlResult.json", "r", encoding="utf-8") as f:
+            json_data = json.load(f)
+
+        # Tạo dictionary để tra cứu nhanh
+        records_dict = {
+            (record.get("mathe"), str(record.get("mabn")), chuyen_doi_ngay(record.get("ngayra"))): record
+            for record in json_data
+        }
+
+        # Duyệt và cập nhật kết quả nhanh hơn
         for item in data:
-            record = kiemtraketqua("dataXmlResult.json", item["patient_code"], item["insurance_code"], item["ngay_ra"])
-            
+            ngay_ra = chuyen_doi_ngay(item["ngay_ra"])  # Chuyển đổi trước
+            key = (item["insurance_code"], str(item["patient_code"]), ngay_ra)
+            record = records_dict.get(key)
+
             if record:
                 print(f"✅ Có kết quả trả về cho STT {item['stt']}")
-                update_json_data_kq(file_path, item["stt"], 1)
+                item["trangthai"] = 1
             else:
                 print(f"❌ Không có kết quả cho STT {item['stt']}")
-                update_json_data_kq(file_path, item["stt"], 0)
+                item["trangthai"] = 0
+
+        # Ghi lại toàn bộ JSON chỉ 1 lần
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
         # Xuất file Excel
         columns_can_xuat = ["stt", "insurance_code", "patient_code", "ins_transaction_code", "ngay_ra", "trangthai"]
@@ -363,6 +377,57 @@ def converttojsonexportkqxml(app):
 
     except Exception as e:
         print(f"🚨 Lỗi trong quá trình xử lý: {e}")
+
+# def converttojsonexportkqxml(app):
+#     global folderurl
+#     file_path = os.path.join(folderurl, "dataJson.json")
+
+#     # Kiểm tra đường dẫn hợp lệ
+#     if not folderurl or not file_path:
+#         messagebox.showinfo(title="LỖI!", message="VUI LÒNG CHỌN FILE JSON ĐÃ XUẤT")
+#         return
+    
+#     print(f"✅ Bắt đầu xử lý với folder: {folderurl}")
+
+#     try:
+#         # Load dữ liệu JSON
+#         data = loadfind_json()
+#         if not data:
+#             print("❌ Lỗi: Không có dữ liệu trong dataJson.json")
+#             return
+        
+#         print(f"🔍 Số lượng bản ghi: {len(data)}")
+
+#         # Chọn file Excel
+#         path = chon_file_excel(app)
+#         if not path:
+#             print("❌ Lỗi: Không chọn được file Excel")
+#             return
+        
+#         print(f"📂 File Excel được chọn: {path}")
+
+#         # Chuyển đổi Excel -> JSON
+#         excel_to_json(path, "dataXmlResult.json")
+
+#         for item in data:
+#             record = kiemtraketqua("dataXmlResult.json", item["patient_code"], item["insurance_code"], item["ngay_ra"])
+            
+#             if record:
+#                 print(f"✅ Có kết quả trả về cho STT {item['stt']}")
+#                 update_json_data_kq(file_path, item["stt"], 1)
+#             else:
+#                 print(f"❌ Không có kết quả cho STT {item['stt']}")
+#                 update_json_data_kq(file_path, item["stt"], 0)
+
+#         # Xuất file Excel
+#         columns_can_xuat = ["stt", "insurance_code", "patient_code", "ins_transaction_code", "ngay_ra", "trangthai"]
+#         output_excel_path = os.path.join(folderurl, "dataKQ.xlsx")
+#         json_to_excel(file_path, output_excel_path, columns_can_xuat)
+
+#         print(f"✅ File Excel đã xuất: {output_excel_path}")
+
+#     except Exception as e:
+#         print(f"🚨 Lỗi trong quá trình xử lý: {e}")
     
 
 
@@ -442,7 +507,9 @@ def kiemtraketqua(file_path, mabn,mabhyt,ngayravien):
         print(f"Lỗi: {e}")
         return None
 #setup app
-
+def hamchayxuatketquaxml(app):
+    import mainExport as mainex
+    mainex.converttojsonexportkqxml(app)
 
 def setupapp():
     global datacount
