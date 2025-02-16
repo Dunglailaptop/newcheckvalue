@@ -16,7 +16,7 @@ CONFIG_PATH_IMAGE_BACKGROUND_APP = os.path.join(BASE_DIR, "source", "crawldata.p
 CONFIG_PATH_IMAGE_BACKGROUND_APP_3 = os.path.join(BASE_DIR, "source", "BG.png")
 CONFIG_PATH_IMAGE_BACKGROUND_APP_2 = os.path.join(BASE_DIR, "source", "BG2.jpg")
 CONFIG_PATH_INVOICEOUTPATIENTDETAIL = os.path.join(BASE_DIR, "source", "invoiceoutpatientdetail.json")
-
+CONFIG_PATH = os.path.join(BASE_DIR, "source", "stt.json")
 terminal_destroy = any
 
 
@@ -45,6 +45,7 @@ contentType = "application/json; charset=utf-8"
 urlGetPrescriptiondetail = "http://192.168.0.77/api/doctor_pkg/load_pkg_last_detail_presc"
 urlGetinvoiceoutdetail = "http://192.168.0.80/api/patients/getOutPatientInvoiceDetail"
 urlApiGetListXML = "http://192.168.0.77/api/tool_send_BHYT/findPaging_nd2"
+urlGetDetailXML = "http://192.168.0.77/api/tool_send_BHYT/readXML"
 Any = object()
 
 def _login_(usernameStr, passwordStr):

@@ -18,16 +18,26 @@ import xml.etree.ElementTree as ET
 import os
 import tkinter as tk
 from tkinter import filedialog
+from typing import List, Dict, Any
 from PIL import Image, ImageTk
-from datetime import datetime
+from datetime import datetime, timezone
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from tkcalendar import DateEntry
+from rx.subject import Subject
+import pandas as pd
+from unidecode import unidecode
+
+treemain = Any
+cols = Any
+folderurl = ""
+datacount = 0
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "source", "stt.json")
 
 #center window
-def center_window(window,width=600,height=400):
+def center_window(window,width=900,height=400):
     screen_width = window.winfo_screenwidth()
     screen_height = window.winfo_screenheight()
     x=(screen_width / 2) - (width / 2)
@@ -102,32 +112,105 @@ def getlistfilexml(tree):
 
 
 #setup treeview table
-def setupTreeviewTable(root,tree):
-    # Tạo cửa sổ Tkinter
-    # Tạo Treeview
- 
+def load_json_to_treeview(tree, important_columns=None):
 
-    # Đặt tiêu đề cho cột
-    tree.heading("STT", text="STT")
-    tree.heading("MA_BN", text="Mã Bệnh Nhân")
-    tree.heading("MA_THE_BHYT", text="Mã Thẻ BHYT")
-    tree.heading("TRANGTHAI", text="Trạng Thái")
+    """Đọc file JSON, chỉ hiển thị các cột cần thiết và tự động điều chỉnh kích thước cột."""
+    global folderurl,datacount
+    file_path = os.path.join(folderurl, "dataJson.json")
 
-    # Điều chỉnh độ rộng của cột
-    tree.column("STT", width=50, anchor="center")
-    tree.column("MA_BN", width=150, anchor="center")
-    tree.column("MA_THE_BHYT", width=150, anchor="center")
-    tree.column("TRANGTHAI", width=100, anchor="center")
+    if not os.path.exists(file_path):
+        print(f"⚠️ File {file_path} không tồn tại! Hãy chọn thư mục trước.")
+        return
 
-   
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+        datacount = len(data)
+        if not data:
+            print("⚠️ JSON rỗng, không thể cập nhật dữ liệu!")
+            return
 
-    # Thêm thanh cuộn (Scroll Bar)
-    scrollbar = ttk.Scrollbar(root, orient="vertical", command=tree.yview)
-    tree.configure(yscroll=scrollbar.set)
-    scrollbar.pack(side="right", fill="y")
+        # Nếu không có danh sách cột cần thiết, lấy toàn bộ cột trong JSON
+        all_columns = list(data[0].keys())[:31]  # Giới hạn 31 cột đầu tiên
+        columns = important_columns if important_columns else all_columns
 
-    # Hiển thị Treeview
-    tree.pack(expand=True, fill="both")
+        # Lọc bỏ những cột không có trong dữ liệu
+        columns = [col for col in columns if col in all_columns]
+
+        # Nếu không còn cột nào hợp lệ
+        if not columns:
+            print("⚠️ Không có cột nào hợp lệ để hiển thị!")
+            return
+
+        # Xóa tất cả cột hiện có trong Treeview
+        tree["columns"] = columns
+        for col in columns:
+            tree.heading(col, text=col)
+
+        # Xóa dữ liệu cũ trong Treeview
+        tree.delete(*tree.get_children())
+
+        # Lưu trữ dữ liệu & đo kích thước cột
+        row_data = []
+        max_widths = {col: len(col) * 10 for col in columns}  # Bắt đầu với tên cột
+
+        for item in data:
+            values = [item.get(col, "N/A") for col in columns]  # Auto-fill "N/A" nếu thiếu
+            row_data.append(values)
+
+            # Cập nhật chiều rộng cột dựa trên dữ liệu
+            for col, value in zip(columns, values):
+                max_widths[col] = max(max_widths[col], len(str(value)) * 8)
+
+        # Thêm dữ liệu vào Treeview
+        for values in row_data:
+            tree.insert("", "end", values=values)
+
+        # Cập nhật chiều rộng cột tự động
+        for col in columns:
+            tree.column(col, width=max(100, min(max_widths[col], 300)), anchor="center")  # Giới hạn tối đa 300px
+
+        print(f"✅ Đã cập nhật dữ liệu từ {file_path} vào Treeview với các cột cần thiết!")
+
+    except Exception as e:
+        print(f"❌ Lỗi khi đọc file JSON: {e}")
+
+
+
+
+#hàm tạo treeview
+def setupTreeviewTable(root):
+    """Tạo Treeview rỗng, chưa có cột"""
+    # Tạo Frame chứa Treeview
+    frame = ttk.Frame(root)
+    frame.pack(expand=True, fill="both", padx=10, pady=10)
+
+    # Tạo Treeview rỗng (chưa có cột)
+    tree = ttk.Treeview(frame, show="headings")
+
+    # Thêm thanh cuộn
+    scrollbar_y = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+    scrollbar_x = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+    tree.configure(yscroll=scrollbar_y.set, xscroll=scrollbar_x.set)
+
+    # Định vị layout
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar_y.grid(row=0, column=1, sticky="ns")
+    scrollbar_x.grid(row=1, column=0, sticky="ew")
+
+    frame.rowconfigure(0, weight=1)
+    frame.columnconfigure(0, weight=1)
+
+    return tree
+
+
+def setupTreeview(tree,label):
+    global folderurl,datacount
+    folderurl = get_urlFolder() + "/"
+    # Khi có dữ liệu, cập nhật cột và dữ liệu
+    load_json_to_treeview(tree,important_columns=["stt","insurance_code", "patient_code", "ngay_ra","trangthai"])
+    label.configure(text=datacount)
+
 
 #load table
 def loaddatatable(json_file,tree):
@@ -141,21 +224,240 @@ def loaddatatable(json_file,tree):
 
     except Exception as e:
         print(f"Lỗi khi đọc file JSON: {e}")
+
+#hàm lấy ngày chọn
+def get_date(cal):
+    selected_date = cal.get_date()  # Lấy ngày từ combobox (YYYY-MM-DD)
+    now_utc = datetime.now(timezone.utc)  # Lấy thời gian hiện tại UTC
+
+    # Chuyển đổi ngày từ combobox sang datetime nhưng giữ nguyên thời gian của now_utc
+    selected_datetime = datetime.strptime(str(selected_date), "%Y-%m-%d").replace(
+        hour=now_utc.hour, minute=now_utc.minute, second=now_utc.second,
+        microsecond=now_utc.microsecond, tzinfo=timezone.utc
+    )
+
+    formatted_date = selected_datetime.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    print(f"Ngày đã chọn (UTC): {formatted_date}")
+    return formatted_date
+
+
+
+def chon_file_excel(app):
+    """
+    Hiển thị hộp thoại để người dùng chọn một file Excel và trả về đường dẫn file.
+    """
+   
+   
+    file_path = filedialog.askopenfilename(
+        title="Chọn file Excel",
+        filetypes=[("Excel Files", "*.xlsx;*.xls")]
+    )
+
+    return file_path
+
+def chuan_hoa_ten_cot(ten_cot):
+    """
+    Chuẩn hóa tên cột: loại bỏ dấu, xóa khoảng trắng, viết thường.
+    """
+    ten_cot = unidecode(ten_cot)  # Bỏ dấu tiếng Việt
+    ten_cot = ten_cot.replace(" ", "").lower()  # Xóa khoảng trắng, viết thường
+    return ten_cot
+
+def json_to_excel(json_file, excel_file, columns=None):
+    """
+    Chuyển đổi file JSON thành file Excel, chỉ xuất các cột được chỉ định.
+
+    :param json_file: Đường dẫn file JSON đầu vào
+    :param excel_file: Đường dẫn file Excel đầu ra
+    :param columns: Danh sách các cột cần xuất (list), nếu None thì xuất tất cả
+    """
+    try:
+        # Đọc dữ liệu từ file JSON
+        df = pd.read_json(json_file)
+
+        # Nếu có danh sách cột, chỉ giữ lại các cột đó
+        if columns:
+            df = df[columns]
+
+        # Ghi dữ liệu ra file Excel
+        df.to_excel(excel_file, index=False, engine="openpyxl")
+
+        print(f"Đã tạo file Excel: {excel_file}")
+
+    except Exception as e:
+        print(f"Lỗi: {e}")
+
+def excel_to_json(file_path, output_json):
+    """
+    Chuyển đổi file Excel thành JSON, chuẩn hóa tên cột.
+
+    :param file_path: Đường dẫn file Excel
+    :param output_json: Đường dẫn file JSON đầu ra
+    """
+    try:
+        # Đọc file Excel
+        df = pd.read_excel(file_path, engine="openpyxl")
+
+        # Chuẩn hóa tên cột
+        df.columns = [chuan_hoa_ten_cot(col) for col in df.columns]
+
+        # Chuyển DataFrame thành danh sách JSON
+        data_json = df.to_dict(orient="records")
+
+        # Ghi vào file JSON
+        with open(output_json, "w", encoding="utf-8") as f:
+            json.dump(data_json, f, ensure_ascii=False, indent=4)
+
+        print(f"Đã tạo file JSON: {output_json}")
+
+    except Exception as e:
+        print(f"Lỗi: {e}")
+
+def converttojsonexportkqxml(app):
+    global folderurl
+    file_path = os.path.join(folderurl, "dataJson.json")
+
+    # Kiểm tra đường dẫn hợp lệ
+    if not folderurl or not file_path:
+        messagebox.showinfo(title="LỖI!", message="VUI LÒNG CHỌN FILE JSON ĐÃ XUẤT")
+        return
+    
+    print(f"✅ Bắt đầu xử lý với folder: {folderurl}")
+
+    try:
+        # Load dữ liệu JSON
+        data = loadfind_json()
+        if not data:
+            print("❌ Lỗi: Không có dữ liệu trong dataJson.json")
+            return
+        
+        print(f"🔍 Số lượng bản ghi: {len(data)}")
+
+        # Chọn file Excel
+        path = chon_file_excel(app)
+        if not path:
+            print("❌ Lỗi: Không chọn được file Excel")
+            return
+        
+        print(f"📂 File Excel được chọn: {path}")
+
+        # Chuyển đổi Excel -> JSON
+        excel_to_json(path, "dataXmlResult.json")
+
+        for item in data:
+            record = kiemtraketqua("dataXmlResult.json", item["patient_code"], item["insurance_code"], item["ngay_ra"])
+            
+            if record:
+                print(f"✅ Có kết quả trả về cho STT {item['stt']}")
+                update_json_data_kq(file_path, item["stt"], 1)
+            else:
+                print(f"❌ Không có kết quả cho STT {item['stt']}")
+                update_json_data_kq(file_path, item["stt"], 0)
+
+        # Xuất file Excel
+        columns_can_xuat = ["stt", "insurance_code", "patient_code", "ins_transaction_code", "ngay_ra", "trangthai"]
+        output_excel_path = os.path.join(folderurl, "dataKQ.xlsx")
+        json_to_excel(file_path, output_excel_path, columns_can_xuat)
+
+        print(f"✅ File Excel đã xuất: {output_excel_path}")
+
+    except Exception as e:
+        print(f"🚨 Lỗi trong quá trình xử lý: {e}")
+    
+
+
+def update_json_data_kq(file_path,stt,trangthaiup):
+    """
+    Cập nhật dữ liệu XML trong tệp JSON theo số thứ tự (stt).
+    
+    Args:
+        file_path (str): Đường dẫn đến tệp JSON.
+        stt (int): Số thứ tự của phần tử cần cập nhật.
+        xml1, xml2, xml3, xml4, xml5, xml7 (str): Dữ liệu cần mã hóa và cập nhật.
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    for item in data:
+        if item.get("stt") == stt:
+            item["trangthai"] = trangthaiup
+            break
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
+def loadfind_json():
+    global folderurl
+    data = []
+    file_path = os.path.join(folderurl, "dataJson.json")
+    with open(file_path, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+        return data
+    return data    
+
+def chuyen_doi_ngay(ngay_goc):
+    """
+    Chuyển đổi ngày từ dạng 'DD/MM/YYYY HH:MM' thành 'DDMMYYYY'.
+    
+    :param ngay_goc: Chuỗi ngày gốc hoặc kiểu datetime
+    :return: Chuỗi ngày dạng 'DDMMYYYY'
+    """
+    try:
+        ngay_dt = pd.to_datetime(ngay_goc, errors='coerce')  # Chuyển thành datetime
+        if pd.isna(ngay_dt):
+            return None  # Trả về None nếu lỗi
+        return ngay_dt.strftime("%d%m%Y")  # Trả về chuỗi định dạng DDMMYYYY
+    except Exception:
+        return None
+    
+def kiem_tra_record(record, mabhyt, mabn, ngayravien):
+    ngay_record = chuyen_doi_ngay(record.get("ngayra"))
+    ngay_input = chuyen_doi_ngay(ngayravien)
+
+    # print(f"🔍 Kiểm tra: {record.get('mathe')} == {mabhyt}")
+    # print(f"🔍 Kiểm tra: {record.get('mabn')} ({type(record.get('mabn'))}) == {mabn} ({type(mabn)})")
+    # print(f"🔍 Kiểm tra ngày: {ngay_record} == {ngay_input}")
+
+    return (record.get("mathe").strip() == mabhyt.strip() and
+            str(record.get("mabn")).strip() == str(mabn).strip() and
+            ngay_record == ngay_input)
+
+def kiemtraketqua(file_path, mabn,mabhyt,ngayravien):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            
+            if not isinstance(data, list):
+                raise ValueError("JSON không chứa danh sách hồ sơ hợp lệ.")
+            
+            for record in data:
+                # if record.get("stt") == 2655:
+                #     print("ở dây:"+str(chuyen_doi_ngay(record.get("ngayra")))+"||"+str(chuyen_doi_ngay(ngayravien)))
+                if kiem_tra_record(record,mabhyt,mabn,ngayravien):
+                    return record
+            
+            return None  # Không tìm thấy
+    except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
+        print(f"Lỗi: {e}")
+        return None
 #setup app
+
+
 def setupapp():
+    global datacount
     # Tạo cửa sổ chính
     app = ctk.CTk()
     app.title("Ứng dụng đọc kết quả xml")
     center_window(app)
-
-    # Tạo bảng (Treeview)
-    columns = ("STT", "MA_BN", "MA_THE_BHYT", "TRANGTHAI")
-    tree = ttk.Treeview(app, columns=columns, show="headings")
-    setupTreeviewTable(app,tree)
-
-  
-    label = ctk.CTkLabel(app,100,20,bg_color="red",text="5",text_color="white")
-    label.pack(pady=5)
+    try:
+        tree = setupTreeviewTable(app)
+     
+        
+        label = ctk.CTkLabel(app,100,20,bg_color="red",text=str(datacount),text_color="white")
+        label.pack(pady=5)
+    except Exception as e:
+        print("lỗi"+str(e))
 
 
     # Hàm xử lý khi nhấn nút
@@ -165,12 +467,31 @@ def setupapp():
     def on_button_2_click():
         messagebox.showinfo("Thông báo", "Bạn đã nhấn nút thứ hai!")
 
+    selected_date = tk.StringVar()
+    cal = DateEntry(app, width=20, background='darkblue', foreground='white', borderwidth=2)
+    cal.pack(side="left", padx=5, pady=5)    
+
     # Tạo nút bấm
-    button1 = ctk.CTkButton(app, text="Chọn file", command=lambda: open_export(app))
+    button1 = ctk.CTkButton(app, text="Lấy danh sách", command=lambda: open_export(app,1,cal))
     button1.pack(side="left", padx=5, pady=5)
 
-    button2 = ctk.CTkButton(app, text="Đọc kết quả", command=lambda: login())
+    button2 = ctk.CTkButton(app, text="Xuất xml", command=lambda: open_export(app,2,cal))
     button2.pack(side="left", padx=5, pady=5)
+
+    
+    button3 = ctk.CTkButton(app, text="Chọn Folder", command=lambda: setupTreeview(tree,label))
+    button3.pack(side="left", padx=5, pady=5)
+
+    button4 = ctk.CTkButton(app, text="Kiểm tra kết quả và xuất file kết quả", command=lambda: converttojsonexportkqxml(app))
+    button4.pack(side="left", padx=5, pady=5)
+
+        # Lấy ngày hiện tại
+  
+
+    # btn = tk.Button(app, text="Lấy ngày", command=lambda: get_date(selected_date,cal))
+    # btn.pack(pady=5)
+
+
 
     
     # Chạy ứng dụng
@@ -199,6 +520,8 @@ def find_record_by_stt(file_path, stt):
     except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
         print(f"Lỗi: {e}")
         return None
+
+
 
 def update_record_status(file_path, stt, new_status):
     try:
@@ -414,10 +737,25 @@ def load_image(file_path,captcha_window):
     captcha_window.wait_variable(captcha_var)
     return captcha_var.get() 
 
+def get_urlFolder():
+    folder_path = filedialog.askdirectory(title="Chọn thư mục")
+    print("Đường dẫn thư mục đã chọn:", folder_path)
+    return folder_path
 
-def open_export(app):
-    import mainExportXML as mainex
-    mainex.settupAppBeginStart(app)
+
+def open_export(app,type,cal):
+    global folderurl
+    datechoose = get_date(cal)
+    print(str(datechoose))
+    if folderurl != '':
+        if type == 1:
+            import mainExportXML as mainex
+            mainex.settupAppBeginStart(app,type,datechoose,folderurl)
+        else: 
+            import mainExportXML as mainex
+            mainex.settupAppBeginStart(app,type,datechoose,folderurl)
+    else:
+        print("Vui lòng chọn folder")
 
 def login():
     url = "https://gdbhyt.baohiemxahoi.gov.vn/DashboardXml1"
@@ -532,3 +870,5 @@ def hamxuly1(driver):
 # Gọi hàm login
 
 setupapp()
+
+

@@ -8,14 +8,28 @@ import json
 import logging
 import requests
 import customtkinter
+import base64
 from tkinter import messagebox
 from psycopg2 import sql
 from PIL import ImageTk, Image
 from tkinter import Menu
 from typing import List, Dict, Any
 import csv
+from datetime import datetime
+import xml.etree.ElementTree as ET
+import json
+import base64
+from handle import button_click_subject
 
+folderurl = ""
+CSV_FILE = ""
+PROGRESS_FILE = ""
+data_jsonurl = ""
+
+tree = Any
+datetimechoose =  ""
 app = sour.Any
+type = 0
 terminal_window = Any
 terminal_text = Any
 script_thread = Any
@@ -71,23 +85,29 @@ def run_script(terminaltext):
     loading_thread.start()
     # Biến global để kiểm soát animation
     try:
-        run_api_and_save(headers) 
-        messagebox.showinfo(title="Thành công!",message="Hoàn thành cào dữ liệu bệnh nhân! Kết nối PostgreSQL đã đóng!.....")
+        if type == 1:
+            run_api_and_save(headers) 
+            messagebox.showinfo(title="Thành công!",message="Hoàn thành cào dữ liệu bệnh nhân! Kết nối PostgreSQL đã đóng!.....")
+        else:
+            hamchaylistxml(headers,data_jsonurl)
+            messagebox.showinfo(title="Thành công!",message="Hoàn thành cào dữ liệu bệnh nhân! Kết nối PostgreSQL đã đóng!.....")
     finally:
         loading = False
         loading_thread.join()
     sour._destroySelenium_()
-    
+    on_closing()
     # app.deiconify()
 
 def load_config():
-    if os.path.exists(sour.CONFIG_PATH):
-        with open(sour.CONFIG_PATH,'r') as f:
+    global PROGRESS_FILE
+    if os.path.exists(PROGRESS_FILE):
+        with open(PROGRESS_FILE,'r') as f:
             return json.load(f)
     return {"page_value": 1, "record_value": 0, "total_page": 1}
 
 def save_config(config):
-    with open(sour.CONFIG_PATH, 'w') as f:
+    global PROGRESS_FILE
+    with open(PROGRESS_FILE, 'w') as f:
         json.dump(config, f)
 
 def update_file_json(l4_value, l6_value, total_page):
@@ -118,144 +138,37 @@ def replace_nulls_with_string(data):
     return data
 
     
-# Thiết lập logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-def add_detail_prescription(datalist: List[Dict[str, Any]]):
-    conn_params = sour.ConnectStr  # Giả sử đây là một đối tượng chứa thông tin kết nối
-    conn = None
-    cur = None
-
-    try:
-        conn = psycopg2.connect(**conn_params)
-        cur = conn.cursor()
-
-        if len(datalist) > 0:
-            for index, d in enumerate(datalist, start=1):
-                try:
-                    # Chuẩn bị dữ liệu cho drug_material_of_prescription
-                    drug_material_data = (
-                        d["drug_material_id"], d["ma_hoat_chat_ax"], d["hoat_chat_ax"],
-                        d["ma_duong_dung_ax"], d["duong_dung_ax"], d["bhyt_so_dk_gpnk"],
-                        d["bhyt_ham_luong"], d["code"], d["code_insurance"],
-                        d["enum_insurance_type"], d["proprietary_name"],
-                        d["insurance_name"], d["ten_thuongmai"], d["drug_original_name_id"],
-                        d["original_names"], d["default_usage_id"], d["enum_usage"],
-                        d["enum_unit_import_sell"], d["unit_usage_id"], d["allow_auto_cal"],
-                        d["num_of_day"], d["max_usage"], d["num_of_time"], d["unit_volume_id"],
-                        d["volume_value"], d["disable"], d["enum_item_type"], d["made_in"],
-                        d["country_name"], d["include_children"], d["insurance_support"],
-                        d["cancer_drug"], d["price"], d["ham_luong"], d["dong_goi"],
-                        d["tac_dung"], d["chi_dinh"], d["chong_chi_dinh"], d["tac_dung_phu"],
-                        d["lieu_luong"], d["poison_type_id"], d["pharmacology_id"],
-                        d["manufacturer_id"], d["ten_hang_sx"], d["renumeration_price"],
-                        d["so_dk_gpnk"], d["price_bv"], d["price_qd"],
-                        d["latest_import_price_vat"], d["latest_import_price"],
-                        d["is_bhyt_in_surgery"], d["stt_tt"], d["bv_ap_thau"], d["stt_dmt"],
-                        d["bhyt_effect_date"], d["bhyt_exp_effect_date"],
-                        d["ngay_hieu_luc_hop_dong"], d["goi_thau_bhyt"], d["phan_nhom_bhyt"],
-                        d["insurance_drug_material_id"], d["bhyt_loai_thuoc"],
-                        d["bhyt_loai_thau"], d["bhyt_nha_thau"], d["bhyt_nha_thau_bak"],
-                        d["bhyt_quyet_dinh"], d["bhyt_so_luong"], d["bhxh_id"],
-                        d["creator_id"], d["created_at"], d["modifier_id"], d["updated_at"],
-                        d["bhxh_pay_percent"], d["service_group_cost_code"],
-                        d["ma_thuoc_dqg"], d["khu_dieu_tri"], d["note"], d["dang_bao_che"],
-                        d["locked"], d["code_atc"], d["co_han_dung"], d["t_trantt"],
-                        d["bk_enum_item_type"], d["is_control"], d["nhom_thuoc"],
-                        d["nhom_duoc_ly"], d["phan_nhom_thuoc_id"], d["dst_price"],
-                        d["im_price"], d["is_special_dept"], d["thang_tuoi_chi_dinh"],
-                        d["max_one_times"], d["max_one_times_by_weight"],
-                        d["min_one_times_by_weight"], d["max_one_day"],
-                        d["max_one_day_by_weight"], d["min_one_day_by_weight"],
-                        d["thuoc_ra_le"], d["gia_temp"], d["is_inventory"],
-                        d["loai_thuan_hop"], d["khong_thanh_toan_rieng"],
-                        d["is_used_event"], d["bhyt_nha_thau_id"], d["bhyt_nha_thau_code"],
-                        d["so_luong_cho_nhap"], d["so_luong_da_nhan"],
-                        d["is_used_event_idm"], d["dose_quantity"], d["dose_unit"],
-                        d["thoi_gian_bao_quan"], d["ten_theo_thau"],
-                        d["prescription_item_id"], d["prescription_id"], d["medicine_id"],
-                        d["usage_title"], d["usage_num"], d["dosage"], d["time"],
-                        d["quantity_num"], d["confirm_sell_num"], d["quantity_title"],
-                        d["dosage_title"], d["morning"], d["noon"], d["afternoon"],
-                        d["evening"], d["paid"], d["is_bhyt"], d["bhyt_pay_percent"],
-                        d["is_bhbl"], d["bhbl_percent"], d["insurance_company_id"],
-                        d["bhbl_amount"], d["bhbl_must_buy_full"], d["status"],
-                        d["num_per_time"], d["is_deleted"], d["solan_ngay"],
-                        d["is_max_one_times"], d["is_max_one_times_by_weight"],
-                        d["is_max_one_day"], d["is_max_one_day_by_weight"],
-                        d["is_min_one_day_by_weight"], d["is_min_one_times_by_weight"],
-                        d["is_duply_original_name"], d["warning_note_doctor"],
-                        d["bhyt_store"], d["canh_bao_thang_tuoi_chi_dinh"],
-                        d["loai_ke_toa"], d["buoi_uong"], d["da_cap"], d["quantity_use"],
-                        d["quantity_remain"], d["ngay_dung_thuoc"], d["order_by"]
-                    )
-
-                    # logging.info(f"Đang xử lý bản ghi thứ {index}/{len(datalist)}")
-                    # logging.debug(f"Số lượng trường dữ liệu: {len(drug_material_data)}")
-
-                    # Sử dụng sql.SQL để tránh SQL injection
-                    insert_query = sql.SQL("""
-                        INSERT INTO prescription_details (
-                            drug_material_id, ma_hoat_chat_ax, hoat_chat_ax, 
-                            ma_duong_dung_ax, duong_dung_ax, bhyt_so_dk_gpnk, bhyt_ham_luong, 
-                            code, code_insurance, enum_insurance_type, proprietary_name, 
-                            insurance_name, ten_thuongmai, drug_original_name_id, original_names, 
-                            default_usage_id, enum_usage, enum_unit_import_sell, unit_usage_id, 
-                            allow_auto_cal, num_of_day, max_usage, num_of_time, unit_volume_id, 
-                            volume_value, disable, enum_item_type, made_in, country_name, 
-                            include_children, insurance_support, cancer_drug, price, ham_luong, 
-                            dong_goi, tac_dung, chi_dinh, chong_chi_dinh, tac_dung_phu, lieu_luong, 
-                            poison_type_id, pharmacology_id, manufacturer_id, ten_hang_sx, 
-                            renumeration_price, so_dk_gpnk, price_bv, price_qd, latest_import_price_vat, 
-                            latest_import_price, is_bhyt_in_surgery, stt_tt, bv_ap_thau, stt_dmt, 
-                            bhyt_effect_date, bhyt_exp_effect_date, ngay_hieu_luc_hop_dong, 
-                            goi_thau_bhyt, phan_nhom_bhyt, insurance_drug_material_id, bhyt_loai_thuoc, 
-                            bhyt_loai_thau, bhyt_nha_thau, bhyt_nha_thau_bak, bhyt_quyet_dinh, 
-                            bhyt_so_luong, bhxh_id, creator_id, created_at, modifier_id, updated_at, 
-                            bhxh_pay_percent, service_group_cost_code, ma_thuoc_dqg, khu_dieu_tri, 
-                            note, dang_bao_che, locked, code_atc, co_han_dung, t_trantt, 
-                            bk_enum_item_type, is_control, nhom_thuoc, nhom_duoc_ly, phan_nhom_thuoc_id, 
-                            dst_price, im_price, is_special_dept, thang_tuoi_chi_dinh, max_one_times, 
-                            max_one_times_by_weight, min_one_times_by_weight, max_one_day, 
-                            max_one_day_by_weight, min_one_day_by_weight, thuoc_ra_le, gia_temp, 
-                            is_inventory, loai_thuan_hop, khong_thanh_toan_rieng, is_used_event, 
-                            bhyt_nha_thau_id, bhyt_nha_thau_code, so_luong_cho_nhap, so_luong_da_nhan, 
-                            is_used_event_idm, dose_quantity, dose_unit, thoi_gian_bao_quan, ten_theo_thau,
-                            prescription_item_id, prescription_id, medicine_id, usage_title, 
-                            usage_num, dosage, time, quantity_num, confirm_sell_num, 
-                            quantity_title, dosage_title, morning, noon, afternoon, evening, 
-                            paid, is_bhyt, bhyt_pay_percent, is_bhbl, bhbl_percent, 
-                            insurance_company_id, bhbl_amount, bhbl_must_buy_full, status, 
-                            num_per_time, is_deleted, solan_ngay, is_max_one_times, 
-                            is_max_one_times_by_weight, is_max_one_day, is_max_one_day_by_weight, 
-                            is_min_one_day_by_weight, is_min_one_times_by_weight, 
-                            is_duply_original_name, warning_note_doctor, bhyt_store, 
-                            canh_bao_thang_tuoi_chi_dinh, loai_ke_toa, buoi_uong, da_cap, 
-                            quantity_use, quantity_remain, ngay_dung_thuoc, order_by
-                        ) 
-                        VALUES ({})
-                    """).format(
-                        sql.SQL(', ').join([sql.Placeholder()] * len(drug_material_data))
-                    )
-
-                    cur.execute(insert_query, drug_material_data)
-                    conn.commit()
-                    logging.info(f"Bản ghi thứ {index} đã được chèn thành công")
-                    log_terminal(f"Bản ghi thứ {index} đã được chèn thành công")
-
-                except Exception as e:
-                    conn.rollback()
-                    logging.error(f"Lỗi khi chèn bản ghi thứ {index}: {e}")
-                    # Có thể thêm xử lý lỗi cụ thể ở đây nếu cần
-
-    except psycopg2.Error as e:
-        logging.error(f"Lỗi kết nối database: {e}")
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
-        logging.info("Kết nối database đã đóng")
+def csv_to_json(csv_file_path, json_file_path=None):
+    """
+    Chuyển đổi tệp CSV thành JSON, thêm số thứ tự cho từng phần tử.
+    
+    Args:
+        csv_file_path (str): Đường dẫn đến tệp CSV.
+        json_file_path (str, optional): Đường dẫn lưu tệp JSON. Nếu None, trả về dữ liệu JSON.
+    
+    Returns:
+        dict or None: Dữ liệu JSON nếu không lưu vào tệp.
+    """
+    data = []
+    
+    with open(csv_file_path, mode='r', encoding='utf-8') as csv_file:
+        csv_reader = csv.DictReader(csv_file)
+        for index, row in enumerate(csv_reader, start=1):
+            row["stt"] = index
+            row["trangthai"]= 0
+            row["xml1"] = ""
+            row["xml2"] = ""
+            row["xml3"] = ""
+            row["xml4"] = ""
+            row["xml5"] = ""
+            row["xml7"] = ""
+            data.append(row)
+    
+    if json_file_path:
+        with open(json_file_path, mode='w', encoding='utf-8') as json_file:
+            json.dump(data, json_file, indent=4, ensure_ascii=False)
+    else:
+        return data
 
 #hàm check kiem tra sự tồn tại
 def check_Count_value(prescriptionid,numberdataget):
@@ -279,8 +192,7 @@ def check_Count_value(prescriptionid,numberdataget):
 
 # Đường dẫn file CSV và file lưu tiến trình
 # Hàm lưu tiến trình
-CSV_FILE = "data.csv"
-PROGRESS_FILE = "progress.json"
+
 def save_progress(page, record, total_page, total_record):
     with open(PROGRESS_FILE, "w") as f:
         json.dump({
@@ -318,6 +230,7 @@ def write_to_csv(data):
 
 # Hàm gọi API và lưu dữ liệu
 def run_api_and_save(header):
+    global data_jsonurl
     progress = load_progress()
     page_value = progress["page_value"]
     record_value = progress["record_value"]
@@ -325,8 +238,8 @@ def run_api_and_save(header):
     total_record = progress["total_record"]
 
     payload = {
-        "date_from": "2025-02-10T13:43:32.800Z",
-        "date_to": "2025-02-10T13:43:32.801Z",
+        "date_from": datetimechoose,
+        "date_to": datetimechoose,
         "item_status": "2",
         "item_type": "0",
         "page": 1,  # Chỉ gọi 1 lần để lấy tổng số trang
@@ -367,46 +280,234 @@ def run_api_and_save(header):
             break  # Tránh vòng lặp vô hạn nếu có lỗi lớn
 
     print("Hoàn thành việc lấy dữ liệu!")
+    csv_to_json(CSV_FILE,data_jsonurl)
+    print("đang chuyển đổi từ csv sang json")
+    button_click_subject.on_next(tree)
+   
 
-  
 
-def hamchaylistxml(header):
-    config = load_config()
-    page_value =config["page_value"]
-    record_value = config["record_value"]
-    checkstatusfail = False
-    total_records = 424
-    while(True):
+def convert_date_format(date_str):
+    """
+    Chuyển đổi ngày từ định dạng 'dd/MM/yyyy HH:mm' sang 'yyyy/MM/dd'.
+    
+    Args:
+        date_str (str): Ngày cần chuyển đổi.
+    
+    Returns:
+        str: Ngày đã chuyển đổi.
+    """
+    date_obj = datetime.strptime(date_str, "%d/%m/%Y %H:%M")
+    return date_obj.strftime("%Y/%m/%d")
+
+def convert_date_compact(date_str):
+    """
+    Chuyển đổi ngày từ định dạng 'dd/MM/yyyy HH:mm' sang 'yyyyMMdd'.
+    
+    Args:
+        date_str (str): Ngày cần chuyển đổi.
+    
+    Returns:
+        str: Ngày đã chuyển đổi.
+    """
+    date_obj = datetime.strptime(date_str, "%d/%m/%Y %H:%M")
+    return date_obj.strftime("%Y%m%d")
+
+def load_config_STT():
+    global folderurl
+    URL = folderurl + "stt.json"
+    if os.path.exists(URL):
+        with open(URL,'r') as f:
+            return json.load(f)
+    return {"STT":1}
+
+def save_config_STT(config):
+    global folderurl
+    URL = folderurl + "stt.json"
+    with open(URL, 'w') as f:
+        json.dump(config, f)
+
+def update_json(stt_value):
+    config = load_config_STT()
+    config["STT"] = stt_value
+    save_config_STT(config)
+
+def encode_base64(input_str):
+    """
+    Mã hóa một chuỗi thành base64.
+    
+    Args:
+        input_str (str): Chuỗi cần mã hóa.
+    
+    Returns:
+        str: Chuỗi đã mã hóa base64.
+    """
+    if not input_str:  # Kiểm tra nếu input_str là None hoặc ""
+        return ""
+    encoded_bytes = base64.b64encode(input_str.encode("utf-8"))
+    return encoded_bytes.decode("utf-8")
+
+def update_json_dataxml(file_path, stt, xml1, xml2, xml3, xml4, xml5, xml7):
+    """
+    Cập nhật dữ liệu XML trong tệp JSON theo số thứ tự (stt).
+    
+    Args:
+        file_path (str): Đường dẫn đến tệp JSON.
+        stt (int): Số thứ tự của phần tử cần cập nhật.
+        xml1, xml2, xml3, xml4, xml5, xml7 (str): Dữ liệu cần mã hóa và cập nhật.
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    for item in data:
+        if item.get("stt") == stt:
+            item["xml1"] = encode_base64(xml1)
+            item["xml2"] = encode_base64(xml2)
+            item["xml3"] = encode_base64(xml3)
+            item["xml4"] = encode_base64(xml4)
+            item["xml5"] = encode_base64(xml5)
+            item["xml7"] = encode_base64(xml7)
+            break
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
+def getAll_JSON(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            
+            if not isinstance(data, list):
+                raise ValueError("JSON không chứa danh sách hồ sơ hợp lệ.")
+            
+            if len(data) > 0:
+              return data
+            
+            return None  # Không tìm thấy
+    except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
+        print(f"Lỗi: {e}")
+        return None
+
+def find_record_by_stt(file_path, stt):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            
+            if not isinstance(data, list):
+                raise ValueError("JSON không chứa danh sách hồ sơ hợp lệ.")
+            
+            for record in data:
+                if record.get("stt") == stt:
+                    return record
+            
+            return None  # Không tìm thấy
+    except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
+        print(f"Lỗi: {e}")
+        return None
+
+
+
+def hamchaylistxml(header,json_file_path):
+    config = load_config_STT()
+    stt_value = config["STT"]
+    demkiemtra = 0
+    checkstatus = False
+    checkupdate = False
+    while (True):
         try:
-            payload = {
-                "date_from": "2025-02-10T13:43:32.800Z",
-                "date_to": "2025-02-10T13:43:32.801Z",
-                "item_status": "2",
-                "item_type": "0",
-                "page": page_value,
-                "patient_code": "",
-                "row_per_page": 20,
-                "tt_hs_ntru": 0
-            }
-            responsexml = requests.get(sour.urlGetinvoiceoutdetail,headers= header,json=payload)
-            dataTT = responsexml.json()
-            Errors = dataTT["error"]
-            checkApi = Errors["code"]
-            if responsexml.status_code == 200 and int(checkApi) == 200:
-                    try:
-                        data = dataTT['data']
-                        numbergetdata = len(data)
-                        if len(data) > 0:
-                            log_terminal("......BẮT ĐẦU GHI DATA VÔ NHA......")
-                            #hàm ghi csv ở đây
-                            #hamm them du lieu vao database postgresql
-                    except Exception as e:
-                        print(f"loi khi them du lieu vao database......")
-            else:
-                    print(f"loi khi lay du lieu chi tiet toa thuoc" + str(e))
-                    checkstatusfail = True
+                data = find_record_by_stt(json_file_path,stt_value)
+                if len(data) > 0:
+                    dateFirst = convert_date_format(data["ngay_ra"]) +"/"
+                    dataEnd = convert_date_compact(data["ngay_ra"])
+
+                    pathxml = str(dateFirst)+data["patient_code"]+"-"+data["pay_receipt_id"]+"-"+str(dataEnd)+"/"
+                    payload = {
+                            "enum_payment_type": data["enum_payment_type"],
+                            "item_status": "2",
+                            "outPatient": True,
+                            "pathXML": pathxml,
+                            "pay_receipt_id": data["pay_receipt_id"]
+                    }
+                    print(payload)
+                    responsexml = requests.get(sour.urlGetDetailXML,headers= header,json=payload)
+                    dataTT = responsexml.json()
+                    Errors = dataTT["error"]
+                    checkApi = Errors["code"]
+                   
+                    if responsexml.status_code == 200 and int(checkApi) == 200:
+                             try:
+                                 datRes = dataTT['data']
+                                 if len(datRes) > 0:
+                                     log_terminal("......BẮT ĐẦU GHI DATA VÔ NHA......")
+                                     xml_keys = ["Xml2", "Xml3", "Xml4", "Xml5", "Xml7"]
+                                     valid_extra_xml_exists = any(datRes[key] not in [None, ""] for key in xml_keys)
+                                     if datRes["Xml1"] not in [None, ""] and valid_extra_xml_exists:
+                                        update_json_dataxml(json_file_path,stt_value,datRes["Xml1"],datRes["Xml2"],datRes["Xml3"],datRes["Xml4"],datRes["Xml5"],datRes["Xml7"])
+                                        demkiemtra = 0
+                                     else:
+                                       checkstatus = True
+                                       demkiemtra += 1
+                                     #hamm them du lieu vao database postgresql
+                             except Exception as e:
+                                 print(f"loi khi them du lieu vao database......")
+                                 checkstatus = True
+                    else:
+                             print(f"loi khi lay du lieu chi tiet toa thuoc" + str(e))
+                             checkstatus = True
+                    if not checkstatus:
+                        stt_value += 1
+                        update_json(stt_value)
+                    if demkiemtra == 5: 
+                        stt_value += 1
+                        update_json(stt_value)
+                else:
+                    checkupdate = False
+                    break
         except Exception as e:
-            print("lỗi trong quá trình ghi dữ liệu:"+e)
+            print("lỗi trong quá trình ghi dữ liệu:"+str(e))
+            break
+    if not checkupdate:
+        data = getAll_JSON(json_file_path)
+        create_fileXML(data)
+   
+
+def create_xml_file(data, filename):
+    giamdinhhs = ET.Element("GIAMDINHHS")
+    
+    thongtindonvi = ET.SubElement(giamdinhhs, "THONGTINDONVI")
+    macskcb = ET.SubElement(thongtindonvi, "MACSKCB")
+    macskcb.text = "79408"
+    
+    thongtinhoso = ET.SubElement(giamdinhhs, "THONGTINHOSO")
+    ngaylap = ET.SubElement(thongtinhoso, "NGAYLAP")
+    soluonghoso = ET.SubElement(thongtinhoso, "SOLUONGHOSO")
+    soluonghoso.text = "1"
+    
+    danhsachhoso = ET.SubElement(thongtinhoso, "DANHSACHHOSO")
+    hoso = ET.SubElement(danhsachhoso, "HOSO")
+    
+    # Lọc các key xml1 đến xml7 có giá trị
+    for i in range(1, 8):
+        key = f"xml{i}"
+        if key in data and data[key]:
+            filehoso = ET.SubElement(hoso, "FILEHOSO")
+            loaihoso = ET.SubElement(filehoso, "LOAIHOSO")
+            loaihoso.text = key.upper()
+            
+            noidungfile = ET.SubElement(filehoso, "NOIDUNGFILE")
+            noidungfile.text = data[key]
+    
+    tree = ET.ElementTree(giamdinhhs)
+    tree.write(filename, encoding="utf-8", xml_declaration=True)
+
+def create_fileXML(data_list):
+   global folderurl
+   for data in data_list:
+        filename = os.path.join(folderurl,f"79408_{data['ma_lk']}.xml")
+        create_xml_file(data, filename)
+        print(f"File {filename} đã được tạo.")
+
+     
        
 
 #hàm lấy dự liệu lên từ database của bảng prescription
@@ -466,30 +567,52 @@ def get_list_data_prescription(header):
 
 
 
-
+def on_closing():
+    global terminal_window,terminal_text
+    terminal_window.destroy()
+   
+    # app.deiconify()
     
 # Function to open a terminal window embedded in the tab
-def open_terminal_window(new_tab):
-       # Clear any existing widgets in the tab
-    for widget in new_tab.winfo_children():
-        widget.destroy()
-    terminal_window = tk.Frame(new_tab)
-    terminal_window.pack(expand=True, fill="both")
+def open_terminal_window():
+    global terminal_window
+    terminal_window = tk.Toplevel()  # Tạo cửa sổ mới
+    terminal_window.title("Terminal Output")
+    terminal_window.geometry("600x400")
 
     terminal_text = tk.Text(terminal_window, bg="black", fg="green", insertbackground="green")
     terminal_text.pack(expand=True, fill="both")
-  
+     
     return terminal_window, terminal_text
 
 # Function to start the script in a separate thread
-def start_script_thread(new_tab):
+def start_script_thread():
     global script_thread
-    terminal_window, terminal_text = open_terminal_window(new_tab)
+    terminal_window, terminal_text = open_terminal_window()
     script_thread = threading.Thread(target=run_script, args=(terminal_text,))
     script_thread.start()
 
 # Function to set up the main application in the tab
-def settupAppBeginStart(new_tab):
-   start_script_thread(new_tab) 
+def settupAppBeginStart(new_tab,types,date,urlFolderSave):
+   global type, datetimechoose,folderurl,CSV_FILE,PROGRESS_FILE,data_jsonurl
+   type = types
+   folderurl = urlFolderSave
+   datetimechoose = str(date)
+   CSV_FILE = urlFolderSave + "data.csv"
+   PROGRESS_FILE = urlFolderSave + "progress.json"
+   data_jsonurl = urlFolderSave + "dataJson.json"
+   start_script_thread()
 
 
+def open_new_terminal_new():
+    """Mở một cửa sổ terminal mới và chạy script"""
+    terminal_window = tk.Toplevel()  # Tạo cửa sổ mới
+    terminal_window.title("Terminal Output")
+    terminal_window.geometry("600x400")
+
+    terminal_text = tk.Text(terminal_window, bg="black", fg="green", insertbackground="green")
+    terminal_text.pack(expand=True, fill="both")
+
+    # Chạy script trong thread để không bị treo GUI
+    script_thread = threading.Thread(target=run_script, args=(terminal_text, terminal_window))
+    script_thread.start()
